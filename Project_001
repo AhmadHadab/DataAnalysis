@@ -4,8 +4,179 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+%matplotlib inline
 
 
-### IMPORT DATA SET
+## Data Wrangling
 
-pd.read_csv('/user/sap/')
+## Define a function to inspect datasets
+
+def inspect(a):
+    print ('This dataset has', a.shape[0], ' rows and ',a.shape[1],' columns..')
+    print ('It has ',a.duplicated().sum(), 'duplicate records..' )
+
+# Load your data and print out a few lines. Perform operations to inspect data
+#   types and look for instances of missing or possibly errant data.
+df = pd.read_csv('noshowappointments.csv')
+df.head(4)
+
+inspect(df)
+
+### Data Cleaning
+# After discussing the structure of the data and any problems that need to be
+#   cleaned, perform those cleaning steps in the second part of this section.
+df.info()
+
+inspect(df)
+
+# Now, we move on to consider converting columns data types. 
+
+df['PatientId'] =  pd.to_numeric( df['PatientId'] , downcast='integer')
+
+## Verify
+df.PatientId[1:7]
+
+# 2- Convert `AppointmentDay` and `ScheduledDay` to Date/Time format
+df.AppointmentDay =  pd.to_datetime(df.AppointmentDay)
+df.ScheduledDay = pd.to_datetime(df.ScheduledDay)
+
+
+## Two columns `No-Show` and `SMS_received` need to be renamed inroder to maintain consistancy in columns naming convention in the dataset.
+
+## Rename No-Show
+df.rename(columns={df.columns[13]:"NoShow"}, inplace=True)
+
+## Rename SMS_recived
+df.rename(columns={df.columns[12]:"SMSReceived"}, inplace=True)
+
+
+## Exploratory Data Analysis
+
+s = df.groupby('NoShow').count()['Age']
+plt.pie(s,labels=['Showed-Up','No-Show'])
+plt.title('Medical Appointments Status');
+
+# s is the number of appintments with or without no-show status 
+
+plt.bar(x=s.index, height=s )
+plt.xticks(s.index,['Showed-up', 'Missed'])
+plt.xlabel('No Show')
+plt.ylabel('Count');
+plt.title('Number of NoShows with Shows'); 
+
+## Spliting the dataset into two datasets
+df_show = df[df.NoShow == 'No'] 
+df_noshow = df[df.NoShow == 'Yes']
+
+# double check the size of eacg sub-dataset
+inspect(df_show), inspect(df_noshow)
+
+
+# After the split, we tend to do primary data analysis with regards to demographical porporties for
+df_show.hist(figsize=(8,8));
+
+df_noshow.hist(figsize=(8,8));
+
+#### Age Analysis : Does Age is a major diffrence beween patients who showed up on thoese who didn't?
+
+plt.subplots(1,1, figsize=(4,4))
+plt.hist(df_noshow['Age'],bins=4)
+plt.title('No-Show / Age')
+plt.xlabel('Age')
+
+
+plt.subplots(1,1, figsize=(4,4))
+plt.hist(df_show['Age'], bins=4)
+plt.title('Showed-up / Age')
+plt.xlabel('Age')
+;
+
+##### Conlcusion: Age is not a factor to determin weather a patient will show or will not to his/her appointment.  
+
+
+
+### Research Question 1 : Do Patients with chronical medical condition show-up more than others?
+
+# Do patients with medical chronical conditions (e.g. diabetes) that require 
+# special and continous medical care tend to make sure to show up to all their appointments more then other type of patients? 
+#
+# To check this, we will create one dataframe for medical apponitments for patients with chronical 
+# medical cases `df_cmc` and anothere for medical appontiments for patients without CMC `df_normal`
+
+df_cmc  = df.query('Hipertension == 1 or Diabetes ==1 or Alcoholism == 1 or Handcap > 0')
+df_normal = df.query('Hipertension == 0 and Diabetes == 0 and Alcoholism == 0 and Handcap == 0')
+
+cmc_show = df_cmc.groupby('NoShow')['Age'].count()
+cmc_show
+normal_show = df_normal.groupby('NoShow')['Age'].count()
+normal_show
+
+cmc = df_cmc.NoShow.value_counts()
+norm = df_normal.NoShow.value_counts()
+
+
+plt.figure(1)
+plt.pie(cmc,labels=['Showed-up','No-Show'])
+plt.title('Patients with Chronical Medical Conditions')
+
+plt.figure(2)
+plt.title('Patients without Chronical Medical Conditions')
+plt.pie(norm, labels=['Showed-up','No-Show']);
+
+
+### Research Question 2 : Appointment Date is a factor?
+
+# Does the time taken between schduling the appointment and the day of the appointment 
+# itself has any effect on the posiblity of missing the appointment?
+# 
+# To answer this question, we will need to create a new column `Time` in the origianl 
+# dataset as the diffrence between `AppointmentDay` and `ScheduledDay`. 
+#
+# In order to do that, we need to import  `datetime` package first. 
+
+import datetime as dt
+
+## FOR ALL NO-SHOW Appointments
+df_noshow['Time'] = df_noshow.AppointmentDay.dt.date - df_noshow.ScheduledDay.dt.date
+
+## FOR ALL SHOWED-UP Appointments 
+df_normal['Time'] = df_normal.AppointmentDay.dt.date - df_normal.ScheduledDay.dt.date
+
+
+## First, we do this analysis for the no-show sub-dataset `df_noshow` we've created earlier.  
+
+times_noshow = df_noshow.groupby('Time').count()['Age']
+
+plt.plot(times_noshow.values, times_noshow.index, 'bo')
+plt.grid()
+plt.title('Number of Days From Reserving to \n Appointment Date for No-shows')
+plt.xlabel('Number of Appointments')
+plt.ylabel('Diffrence in Days');
+
+## We see that the number of appointments for 0 days = 1750... the more the days, the less the number of appointments. 
+## Also, the graph shows that thre are very few number of appointments with date diffrence less than 0 which 
+## does not make any scense, but we could ignore them as they are very few compared to the total number of records 
+## in the data set. 
+
+## Second, we do this analysis for the "show" sub-dataset `df_normal` we've created earlier.  
+
+times_normal = df_normal.groupby('Time').count()['Age']
+
+plt.plot(times_normal.values, times_normal.index, 'mo')
+plt.grid()
+plt.title('Number of Days From Reserving to \n Appointment Date for Atteneded Appointments ')
+plt.xlabel('Number of Appointments')
+plt.ylabel('Diffrence in Days');
+
+## Here we that the majoirty of the dataset records has day diffrence = 0. 
+#
+## In other words, out of 84115 appointments where patients shows up to,
+## almost 30,000 of them had booked their apporintment on the same day.
+
+## Conclusions
+
+# **1**: The meidcal condition of the patient is not a factor to rely on deciding if an appointmnet will be a no-show or not. This result is based on the analysis of the given dataset. It showed no direct relation between weather the patient had a chronical medical condition and weather he/she will be more motivated and committeed to show-up to the next medical appointmnt 
+# **2**: The lenght of time taken from booking a medical appointment and the actual data of that medical appintment could be conidered a valuable factor in determinning waether or not a medical apponitment will be a no-show. This may need to be tested and verified  on a bigger dataset.
+# **3**: Further anlysis would be required on a bigger scale that includes other columns inorder to draw more conluctions.    
+
+
